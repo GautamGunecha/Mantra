@@ -148,9 +148,14 @@ const login = async (req, res, next) => {
 
     res.cookie("refreshtoken", refreshToken, {
       httpOnly: true,
-      path: "/mantra/user/refresh-token",
+      path: "mantra/user/refresh-token",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
+
+    logger("Setting user status to active if set to inactive");
+    await Object.assign(user, {
+      status: "active",
+    }).save();
 
     return res.status(200).json({
       success: true,
@@ -244,6 +249,7 @@ const forgotPassword = async (req, res, next) => {
       status: 200,
       message: "Please check email to reset password.",
       url,
+      accessToken,
     });
   } catch (error) {
     error.statusCode = 400;
@@ -253,11 +259,12 @@ const forgotPassword = async (req, res, next) => {
 
 const resetPassword = async (req, res, next) => {
   try {
-    logger("Received request to reset password", req.body);
+    logger("Received request to reset password");
+    logger("Checking req", req);
 
-    const { body = {}, params = {} } = req;
+    const { body = {}, query = {} } = req;
     const { password = "" } = body;
-    const { token } = params;
+    const { token } = query;
 
     if (!password || !token)
       throw new Error("Unauthorised access to reset password.");
@@ -269,6 +276,24 @@ const resetPassword = async (req, res, next) => {
 
     const user = await Users.findOne({ _id: id }, { password: 1 });
     if (!user) throw new Error("User not found");
+    logger("User data fetched", user);
+
+    const isMatch = await bcrypt.compare(password, user?.password);
+    logger("Comparing previously entered password.", { isMatch });
+    if (isMatch)
+      throw new Error("You cannot use previous password as new password.");
+
+    const isPassword = validatePassword(password);
+    if (!isPassword.success) throw new Error(isPassword?.msg);
+
+    const salt = await bcrypt.genSalt(13);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    logger("Updating user password");
+
+    await Object.assign(user, {
+      password: passwordHash,
+    }).save();
 
     res.status(200).json({
       success: true,
@@ -290,7 +315,7 @@ const resetPassword = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
   try {
-    res.clearCookie("refreshtoken", { path: "/mantra/user/refresh-token" });
+    res.clearCookie("refreshtoken", { path: "mantra/user/refresh-token" });
     return res.status(200).json({
       success: true,
       status: 200,
@@ -302,6 +327,52 @@ const logout = async (req, res, next) => {
 };
 
 /**
+ * Delete user
+ */
+
+const deleteUser = async (req, res, next) => {
+  try {
+    logger("Received req to delete user.");
+    const { query = {} } = req;
+    const { token = "" } = query;
+
+    logger("User token received & validating received token", token);
+    const validateToken = verifyUserAccessToken(token);
+    logger("Token valid for user", { validateToken });
+    if (!validateToken) throw new Error("Invalid grant access.");
+
+    const { id } = validateToken;
+    const user = await Users.findOne(
+      {
+        _id: id,
+      },
+      {
+        status: 1,
+      }
+    );
+
+    if (!user) throw new Error("Invalid user access.");
+
+    logger("Inactivating user", user);
+
+    await Object.assign(user, {
+      status: "inactive",
+    }).save();
+
+    return res.status(200).json({
+      success: true,
+      status: 200,
+      message: "Your account has been set to inactive.",
+    });
+  } catch (error) {
+    error.statusCode = 400;
+    next(error);
+  }
+};
+
+// social auth
+
+/**
  *
  * @param {*} req
  * @param {*} res
@@ -310,23 +381,6 @@ const logout = async (req, res, next) => {
 
 const googleAuth = async (req, res, next) => {
   try {
-  } catch (error) {
-    next(error);
-  }
-};
-
-/**
- * Delete user
- */
-
-const deleteUser = async (req, res, next) => {
-  try {
-    const { id } = req.body;
-
-    const user = await Users.findOne({ _id: id });
-    await Object.assign(user, {
-      status: "inactive",
-    }).save();
   } catch (error) {
     next(error);
   }
@@ -343,5 +397,7 @@ module.exports = {
   resetPassword,
 
   logout,
+  deleteUser,
+
   googleAuth,
 };

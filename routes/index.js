@@ -10,18 +10,30 @@ const {
   validate,
   forgotPassword,
   resetPassword,
+  deleteUser,
 } = require("../controllers/auth");
 
+// users route
+const { getUserInfo, updateUserInfo } = require("../controllers/users");
+
+// middleware
+const { auth, admin } = require("../middlewares/auth");
+
 // authentication routing
-router.post("/register", create);
-router.post("/validate", validate);
+router.post("/auth/register", create);
+router.post("/auth/validate", validate);
 
-router.post("/login", login);
-router.post("/access-token", generateAccessToken);
+router.post("/auth/login", login);
+router.post("/auth/access-token", generateAccessToken);
 
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password/:token", resetPassword);
+router.post("/auth/forgot-password", forgotPassword);
+router.put("/auth/reset-password", auth, resetPassword);
 
-router.post("/logout", logout);
+router.post("/auth/logout", auth, logout);
+router.put("/auth/delete", auth, deleteUser);
+
+// user
+router.get("/user/get-user-info", auth, getUserInfo);
+router.put("/user/update-user-info", auth, updateUserInfo);
 
 module.exports = router;

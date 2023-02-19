@@ -39,8 +39,8 @@ app.set("view engine", "ejs");
 // api endpoints.
 app.get("/", (req, res) => res.render("index"));
 
-// auth - route
-app.use("/mantra/api/auth", require("./routes"));
+// mantr - api route.
+app.use("/mantra/api", require("./routes"));
 
 // errorHandler.
 app.use(errorHandler);
